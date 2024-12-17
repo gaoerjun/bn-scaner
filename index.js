@@ -3,25 +3,30 @@ const app = express()
 const port = 3000
 const request = require("request")
 const cheerio = require("cheerio")
-const axios =require( "axios")
+const axios = require("axios")
+const proxyhost = "gw.cloudbypass.com"
+const proxyport = "1288"
+const username = "67091105-dat"
+const password = "mwmtakht"
+const proxyurl = "https://example.com/"
 
 app.get("/", (req, res) => {
   res.send("Hello World!")
 })
 function extractAddresses(inputString) {
   // 正则表达式：匹配以太坊合约地址（0x开头，40个十六进制字符）
-  const ethRegex = /\b0x[a-fA-F0-9]{40}\b/g;
-  
+  const ethRegex = /\b0x[a-fA-F0-9]{40}\b/g
+
   // 正则表达式：匹配Solana合约地址（Base58编码，44个字符）
-  const solRegex = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g;
-  
-  const ethMatches = inputString.match(ethRegex);
-  const solMatches = inputString.match(solRegex);
+  const solRegex = /\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g
+
+  const ethMatches = inputString.match(ethRegex)
+  const solMatches = inputString.match(solRegex)
 
   return {
     ethAddresses: ethMatches ? ethMatches : [],
     solAddresses: solMatches ? solMatches : [],
-  };
+  }
 }
 let userAgentList = [
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:59.0) Gecko/20100101 Firefox/59.0",
@@ -38,14 +43,29 @@ function getUserAgent() {
   let index = parseInt(Math.random() * len)
   return userAgentList[index]
 }
-app.get("/test", (req, res) => {
+app.get("/test", (req, res) =>
+{
+  var proxyUrl = "http://" + username + ":" + password + "@" + proxyhost + ":" + proxyport;
+
+  var proxiedRequest = request.defaults({'proxy': proxyUrl});
+
   console.log("start resueqs ...")
   let options = {
-    url: "https://www.binance.com/en/support/announcement/new-cryptocurrency-listing?c=48&navId=48",
+    url: "https://www.binance.com/cn/support/announcement/new-cryptocurrency-listing?c=48&navId=48",
     method: "get",
     gzip: true,
+    // proxy: [
+    //   {
+    //     protocal:'http',
+    //     host: proxyhost,
+    //     port: proxyport,
+    //     auth: {
+    //       username: username,
+    //       password: password,
+    //     },
+    //   },
+    // ],
     headers: {
-      headers: {
         Accept:
           "text/html,application/xhtml+xml,application/json,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
         "Accept-Encoding": "gzip, deflate, br",
@@ -53,38 +73,22 @@ app.get("/test", (req, res) => {
         "Cache-Control": "max-age=0",
         Connection: "keep-alive",
         Host: "www.binance.com",
-        Referer: "https://www.binance.com/en/support/announcement/new-cryptocurrency-listing?c=48&navId=48",
+        Referer:
+          "https://www.binance.com/cn/support/announcement/new-cryptocurrency-listing?c=48&navId=48",
         "User-Agent": getUserAgent(),
-      },
     },
   }
-  axios.get("https://www.binance.com/en/support/announcement/new-cryptocurrency-listing?c=48&navId=48", {
-    headers: {
-      Accept:
-         "text/html,application/xhtml+xml,application/json,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-           "Accept-Encoding": "gzip, deflate, br",
-           "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-           "Cache-Control": "max-age=0",
-           Connection: "keep-alive",
-           Host: "www.binance.com",
-           "Upgrade-Insecure-Requests": 1,
-           "User-Agent": getUserAgent(),
-    }
-  }).then(res =>
-  { 
-    console.log("res...",res)
-  })
-  request(options).then(result =>
-  { 
-    console.log("result...",result)
-  })
-  console.log("options...",options);
-  request(options, async (err, response, body) => {
-    // console.log("response finnesd ...",err, response,body);
-    CoinDetailDealing = false;
+  // console.log("options...",options);
+  proxiedRequest(options, async (err, response, body) => {
+    console.log("response finnesd ...", err, body)
+    CoinDetailDealing = false
     const $ = cheerio.load(body)
     const dataJsonStr = `${$("#__APP_DATA").text()}`
     console.log("dataJsonStr...", dataJsonStr)
+    if (!dataJsonStr) {
+      res.end("{code:500,msg:'error'}")
+      return
+    }
     const resultJson = JSON.parse(dataJsonStr)
     // console.log(resultJson.appState.loader.dataByRouteId.d34e.catalogDetail.articles)
     const firstDialog =
@@ -92,18 +96,30 @@ app.get("/test", (req, res) => {
     console.log("request time ..", new Date())
     console.log("find result...", firstDialog)
     const url =
-      "https://www.binance.com/en/support/announcement/" +
-      encodeURIComponent( firstDialog.title.toLowerCase().replace(/\s+/g, "-") +
-      "-" +
-      firstDialog.code)
+      "https://www.binance.com/cn/support/announcement/" +
+      encodeURIComponent(
+        firstDialog.title.toLowerCase().replace(/\s+/g, "-") +
+          "-" +
+          firstDialog.code
+      )
     let options2 = {
       url: url,
       method: "get",
       gzip: true,
+      // proxy: [
+      //   {
+      //     protocal:'http',
+      //     host: proxyhost,
+      //     port: proxyport,
+      //     auth: {
+      //       username: username,
+      //       password: password,
+      //     },
+      //   },
+      // ],
       headers: {
-        headers: {
           Accept:
-          "text/html,application/xhtml+xml,application/json,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+            "text/html,application/xhtml+xml,application/json,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
           "Accept-Encoding": "gzip, deflate, br",
           "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
           "Cache-Control": "max-age=0",
@@ -111,30 +127,19 @@ app.get("/test", (req, res) => {
           Host: "www.binance.com",
           "Upgrade-Insecure-Requests": 1,
           "User-Agent": getUserAgent(),
-        },
       },
     }
-    request(options2, function (err, response, detailbody)
-    {
-      // console.log("err....",err,detailbody)
+    proxiedRequest(options2, function (err, response, detailbody) {
+      console.log("err....",err,detailbody)
       const $2 = cheerio.load(detailbody)
       const dataJsonStr = `${$2("#__APP_DATA").text()}`
       const resultJson = JSON.parse(dataJsonStr)
       // console.log(resultJson.appState.loader.dataByRouteId.d34e.catalogDetail.articles)
-      const detail = resultJson.appState.loader.dataByRouteId.d34e.articleDetail.body
-      // const reg = /0x[\w]+/g
-      // const result = reg.exec(detail)
-      // const result2 = reg.exec(detail)
-
-      // console.log("detail", result[0],result[0],result2 && result2[0])
-      // // let arr = Array.from(result)
-      // // arr.forEach(item =>
-      // // {
-      // //   console.log("item...",item[0])
-      // // })
-      const addresse = extractAddresses(detail);
-      console.log("addresses ...",addresse)
-      res.end(JSON.stringify({...firstDialog,contractAddress:addresse}, 2))
+      const detail =
+        resultJson.appState.loader.dataByRouteId.d34e.articleDetail.body
+      const addresse = extractAddresses(detail)
+      console.log("addresses ...", addresse)
+      res.end(JSON.stringify({ ...firstDialog, contractAddress: addresse }, 2))
     })
   })
 })
