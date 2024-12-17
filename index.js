@@ -4,11 +4,58 @@ const port = 3000
 const request = require("request")
 const cheerio = require("cheerio")
 const axios = require("axios")
+const sqlite3 = require('sqlite3').verbose()
 const proxyhost = "gw.cloudbypass.com"
 const proxyport = "1288"
 const username = "67091105-dat"
 const password = "mwmtakht"
 const proxyurl = "https://example.com/"
+let firstDialogId = 0
+
+// 初始化数据库连接
+const db = new sqlite3.Database('config.db', (err) => {
+  if (err) {
+    console.error('数据库连接失败:', err)
+  } else {
+    console.log('成功连接到数据库')
+    // 创建配置表
+    db.run(`CREATE TABLE IF NOT EXISTS configs (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`)
+  }
+})
+
+// 读取配置函数
+async function getConfig(key) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT value FROM configs WHERE key = ?', [key], (err, row) => {
+      if (err) {
+        reject(err)
+      } else {
+        resolve(row ? row.value : null)
+      }
+    })
+  })
+}
+
+// 保存配置函数
+async function saveConfig(key, value) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      'INSERT OR REPLACE INTO configs (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+      [key, value],
+      (err) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve()
+        }
+      }
+    )
+  })
+}
 
 app.get("/", (req, res) => {
   res.send("Hello World!")
@@ -43,7 +90,7 @@ function getUserAgent() {
   let index = parseInt(Math.random() * len)
   return userAgentList[index]
 }
-app.get("/test", (req, res) => {
+app.get("/test", async (req, res) => {
   var proxyUrl =
     "http://" + username + ":" + password + "@" + proxyhost + ":" + proxyport
 
@@ -78,17 +125,6 @@ app.get("/test", (req, res) => {
     url: "https://www.binance.com/cn/support/announcement/new-cryptocurrency-listing?c=48&navId=48",
     method: "get",
     gzip: true,
-    // proxy: [
-    //   {
-    //     protocal:'http',
-    //     host: proxyhost,
-    //     port: proxyport,
-    //     auth: {
-    //       username: username,
-    //       password: password,
-    //     },
-    //   },
-    // ],
     headers: {
       ...headers,
       referer:
@@ -97,22 +133,29 @@ app.get("/test", (req, res) => {
   }
   // console.log("options...",options);
   proxiedRequest(options, async (err, response, body) => {
-    console.log("response finnesd ...", err, body)
+    console.log("response finnesd ...", err)
     CoinDetailDealing = false
     const $ = cheerio.load(body)
     const dataJsonStr = `${$("#__APP_DATA").text()}`
-    console.log("dataJsonStr...", dataJsonStr)
     if (!dataJsonStr) {
       res.end("{code:500,msg:'error'}")
       return
     }
     const resultJson = JSON.parse(dataJsonStr)
-
+    const firstDialogId = await getConfig("firstDialogId")
+    console.log("firstDialogId...", firstDialogId)
     // console.log(resultJson.appState.loader.dataByRouteId.d34e.catalogDetail.articles)
     const firstDialog =
-      resultJson.appState.loader.dataByRouteId.d34e.catalogDetail.articles[0]
+      resultJson.appState.loader.dataByRouteId.d34e?.catalogDetail?.articles[0]
     console.log("request time ..", new Date())
     console.log("find result...", firstDialog)
+    if (Number(firstDialogId) !== firstDialog.id)
+    {
+     await saveConfig("firstDialogId", firstDialog.id)
+    }else{
+      res.end(JSON.stringify({ ...firstDialog }, 2))
+      return
+    }
     const url =
       "https://www.binance.com/cn/support/announcement/" +
       encodeURIComponent(
@@ -126,14 +169,18 @@ app.get("/test", (req, res) => {
       gzip: true,
       headers: { ...headers, referer: url },
     }
+    console.log("request detail...")
     proxiedRequest(options2, function (err, response, detailbody) {
-      console.log("err....", err, detailbody)
       const $2 = cheerio.load(detailbody)
       const dataJsonStr = `${$2("#__APP_DATA").text()}`
       const resultJson = JSON.parse(dataJsonStr)
       // console.log(resultJson.appState.loader.dataByRouteId.d34e.catalogDetail.articles)
       const detail =
-        resultJson.appState.loader.dataByRouteId.d34e.articleDetail.body
+        resultJson.appState.loader.dataByRouteId?.d34e?.articleDetail?.body
+      if(!detail){
+        res.end(JSON.stringify({ ...firstDialog }, 2))
+        return
+      }
       const addresse = extractAddresses(detail)
       console.log("addresses ...", addresse)
       res.end(JSON.stringify({ ...firstDialog, contractAddress: addresse }, 2))
@@ -143,4 +190,16 @@ app.get("/test", (req, res) => {
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`)
+})
+
+// 确保程序退出时关闭数据库连接
+process.on('SIGINT', () => {
+  db.close((err) => {
+    if (err) {
+      console.error('关闭数据库时出错:', err)
+    } else {
+      console.log('数据库连接已关闭')
+    }
+    process.exit(0)
+  })
 })
